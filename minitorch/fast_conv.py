@@ -1,3 +1,4 @@
+from operator import index
 from typing import Tuple, TypeVar, Any
 
 import numpy as np
@@ -90,7 +91,7 @@ def _tensor_conv1d(
     s1 = input_strides
     s2 = weight_strides
 
-    for b in range(batch):
+    for b in prange(batch):
         for oc in range(out_channels):
             for i in range(out_width):
 
@@ -228,7 +229,7 @@ def _tensor_conv2d(
         reverse (bool): anchor weight at top-left or bottom-right
 
     """
-    batch_, out_channels, _, _ = out_shape
+    batch_, out_channels, out_height, out_width = out_shape
     batch, in_channels, height, width = input_shape
     out_channels_, in_channels_, kh, kw = weight_shape
 
@@ -240,12 +241,46 @@ def _tensor_conv2d(
 
     s1 = input_strides
     s2 = weight_strides
+    s3 = out_strides
     # inners
     s10, s11, s12, s13 = s1[0], s1[1], s1[2], s1[3]
     s20, s21, s22, s23 = s2[0], s2[1], s2[2], s2[3]
+    s30, s31, s32, s33 = s3[0], s3[1], s3[2], s3[3]
 
-    # TODO: Implement for Task 4.2.
-    raise NotImplementedError("Need to implement for Task 4.2")
+    for b in prange(batch):
+        for oc in range(out_channels):
+            for oh in range(out_height):
+                for ow in range(out_width):
+
+                    out_pos =  b*s30 + oc*s31 + oh*s32 + ow*s33 # index_to_position(Index((b, oc, oh, ow)), out_strides)
+                    acc = 0
+
+                    for ic in range(in_channels):
+                        for ikh in range(kh):
+                            for ikw in range(kw):
+
+                                w_pos = oc*s20 + ic*s21 + ikh*s22 + ikw*s23
+                                w = weight[w_pos]
+
+                                if not reverse:
+
+                                    in_h = oh + ikh
+                                    in_w = ow + ikw
+
+                                    if in_h < height and in_w < width:
+                                        in_pos = b*s10 + ic*s11 + in_h*s12 + in_w*s13 # index_to_position(Index((b, ic, in_h, in_w)), s1)
+                                        acc += input[in_pos]*w
+                                
+                                else:
+
+                                    in_h = oh - ikh
+                                    in_w = ow - ikw
+
+                                    if in_h >= 0  and in_w >= 0:
+                                        in_pos = b*s10 + ic*s11 + in_h*s12 + in_w*s13
+                                        acc += input[in_pos]*w
+                    
+                    out[out_pos] = acc
 
 
 tensor_conv2d = njit(_tensor_conv2d, parallel=True, fastmath=True)
