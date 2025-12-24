@@ -90,8 +90,33 @@ def _tensor_conv1d(
     s1 = input_strides
     s2 = weight_strides
 
-    # TODO: Implement for Task 4.1.
-    raise NotImplementedError("Need to implement for Task 4.1")
+    for b in range(batch):
+        for oc in range(out_channels):
+            for i in range(out_width):
+
+                acc = 0
+                out_pos = b*out_strides[0] + oc*out_strides[1] + i*out_strides[2]
+
+                for ic in range(in_channels):
+                    for k in range(kw):
+
+                        w_pos = oc*s2[0] + ic*s2[1] + k*s2[2]
+                        w = weight[w_pos]
+
+                        if not reverse:
+                            input_index = i + k
+                            if input_index < width:
+                                in_pos = b*s1[0] + ic*s1[1] + input_index*s1[2]
+                                acc += input[in_pos]*w
+                        else:
+                            input_index = i - k
+                            if input_index >= 0:
+                                in_pos = b*s1[0] + ic*s1[1] + input_index*s1[2]
+                                acc += input[in_pos]*w
+            
+                out[out_pos] = acc
+
+
 
 
 tensor_conv1d = njit(_tensor_conv1d, parallel=True)
