@@ -89,15 +89,14 @@ class Max(Function):
         "Forward of max should be max reduction"
         d = int(dim.item())
         out = max_reduce(input, d)
-        oh = out == input
-        ctx.save_for_backward(out, oh)
-        
+        oh = out == input  # one-hot: 1 where input equals max
+        ctx.save_for_backward(oh)
         return out
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
         "Backward of max should be argmax (see above)"
-        out, oh = ctx.saved_tensors
+        oh, = ctx.saved_values
         return grad_output * oh, 0.0
 
 
@@ -120,8 +119,10 @@ def softmax(input: Tensor, dim: int) -> Tensor:
     Returns:
         softmax tensor
     """
-    # TODO: Implement for Task 4.4.
-    raise NotImplementedError('Need to implement for Task 4.4')
+    exp_in = input.exp()
+    sum_exp = exp_in.sum(dim=dim)
+
+    return exp_in/sum_exp
 
 
 def logsoftmax(input: Tensor, dim: int) -> Tensor:
@@ -139,8 +140,8 @@ def logsoftmax(input: Tensor, dim: int) -> Tensor:
     Returns:
          log of softmax tensor
     """
-    # TODO: Implement for Task 4.4.
-    raise NotImplementedError('Need to implement for Task 4.4')
+
+    return input - input.exp().sum(dim).log()
 
 
 def maxpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
@@ -155,8 +156,9 @@ def maxpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
         Tensor : pooled tensor
     """
     batch, channel, height, width = input.shape
-    # TODO: Implement for Task 4.4.
-    raise NotImplementedError('Need to implement for Task 4.4')
+    
+    tiled, nh, nw = tile(input, kernel)
+    return max(tiled, dim=4).view(batch, channel, nh, nw)
 
 
 def dropout(input: Tensor, rate: float, ignore: bool = False) -> Tensor:
@@ -171,5 +173,15 @@ def dropout(input: Tensor, rate: float, ignore: bool = False) -> Tensor:
     Returns:
         tensor with random positions dropped out
     """
-    # TODO: Implement for Task 4.4.
-    raise NotImplementedError('Need to implement for Task 4.4')
+    if ignore:
+        return input
+    
+    if rate == 1:
+        return input * 0
+    
+    mask = rand(input.shape) > rate
+    print(input, rate)
+    print("here", mask)
+
+    return input * mask/(1.0-rate)
+
