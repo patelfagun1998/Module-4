@@ -1,15 +1,21 @@
 import random
+import math
 
 import embeddings
 
 import minitorch
 from datasets import load_dataset
 
+import minitorch.fast_conv
+
 BACKEND = minitorch.TensorBackend(minitorch.FastOps)
 
 
 def RParam(*shape):
-    r = 0.1 * (minitorch.rand(shape, backend=BACKEND) - 0.5)
+    # Xavier-like initialization: scale by sqrt(2/fan_in)
+    fan_in = shape[0] if len(shape) > 0 else 1
+    std = math.sqrt(2.0 / fan_in)
+    r = std * (minitorch.rand(shape, backend=BACKEND) - 0.5) * 2  # uniform in [-std, std]
     return minitorch.Parameter(r)
 
 
@@ -34,8 +40,8 @@ class Conv1d(minitorch.Module):
         self.bias = RParam(1, out_channels, 1)
 
     def forward(self, input):
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        return minitorch.fast_conv.conv1d(input, self.weights.value) + self.bias.value
+
 
 
 class CNNSentimentKim(minitorch.Module):
@@ -61,15 +67,41 @@ class CNNSentimentKim(minitorch.Module):
     ):
         super().__init__()
         self.feature_map_size = feature_map_size
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        self.embedding_sizes = embedding_size
+        self.filter_sizes = filter_sizes
+        self.dropout_rate = dropout
+
+        # Register each filter as a named attribute so parameters() can find them
+        # Also create a separate linear projection for each filter path
+        for i, filter_size in enumerate(self.filter_sizes):
+            conv_layer = Conv1d(embedding_size, feature_map_size, filter_size)
+            setattr(self, f'conv_{i}', conv_layer)
+            linear_layer = Linear(feature_map_size, 1)
+            setattr(self, f'linear_{i}', linear_layer)
 
     def forward(self, embeddings):
         """
         embeddings tensor: [batch x sentence length x embedding dim]
         """
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        embeddings = embeddings.permute(0, 2, 1)
+        batch, embedding_dim, sentence_len = embeddings.shape
+        
+        # Process each filter path and sum the linear outputs
+        out = None
+        for i in range(len(self.filter_sizes)):
+            conv_layer = getattr(self, f'conv_{i}')
+            linear_layer = getattr(self, f'linear_{i}')
+            
+            conv = conv_layer(embeddings).relu()
+            max_pool = minitorch.max(conv, dim=2).view(batch, self.feature_map_size)
+            proj = linear_layer(max_pool)
+            
+            if out is None:
+                out = proj
+            else:
+                out = out + proj
+        
+        return minitorch.dropout(out, self.dropout_rate, ignore=not self.training).sigmoid()
 
 
 # Evaluation helper methods
@@ -224,7 +256,7 @@ def encode_sentences(
 def encode_sentiment_data(dataset, pretrained_embeddings, N_train, N_val=0):
     #  Determine max sentence length for padding
     max_sentence_len = 0
-    for sentence in dataset["train"]["sentence"] + dataset["validation"]["sentence"]:
+    for sentence in list(dataset["train"]["sentence"]) + list(dataset["validation"]["sentence"]):
         max_sentence_len = max(max_sentence_len, len(sentence.split()))
 
     unks = set()

@@ -1,6 +1,10 @@
 from mnist import MNIST
 
 import minitorch
+import math
+
+import minitorch.fast_conv
+from minitorch.nn import avgpool2d, logsoftmax
 
 mndata = MNIST("project/data/")
 images, labels = mndata.load_training()
@@ -16,7 +20,9 @@ H, W = 28, 28
 
 
 def RParam(*shape):
-    r = 0.1 * (minitorch.rand(shape, backend=BACKEND) - 0.5)
+    fan_in = shape[0] if len(shape) > 0 else 1
+    std = math.sqrt(2.0 / fan_in)
+    r = std * (minitorch.rand(shape, backend=BACKEND) - 0.5) * 2  # uniform in [-std, std]
     return minitorch.Parameter(r)
 
 
@@ -41,8 +47,8 @@ class Conv2d(minitorch.Module):
         self.bias = RParam(out_channels, 1, 1)
 
     def forward(self, input):
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        
+        return minitorch.fast_conv.conv2d(input, self.weights.value) + self.bias.value
 
 
 class Network(minitorch.Module):
@@ -67,12 +73,24 @@ class Network(minitorch.Module):
         self.mid = None
         self.out = None
 
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        self.conv1 = Conv2d(1, 4, 3, 3)
+        self.conv2 = Conv2d(4, 8, 3, 3)
+        self.linear_64 = Linear(392, 64)
+        self.linear_out = Linear(64, C)
+        self.dropout_rate = 0.25
 
     def forward(self, x):
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        
+        batch, in_channels, h, w = x.shape
+
+        self.mid = self.conv1(x).relu()
+        self.out = self.conv2(self.mid).relu()
+
+        self.pooled = avgpool2d(self.out, (4,4)).view(batch, 392)
+
+        self.linear1 = minitorch.dropout(self.linear_64(self.pooled).relu(), self.dropout_rate, ignore=not self.training)
+
+        return logsoftmax(self.linear_out(self.linear1), dim=1)
 
 
 def make_mnist(start, stop):
@@ -99,7 +117,7 @@ class ImageTrain:
         return self.model.forward(minitorch.tensor([x], backend=BACKEND))
 
     def train(
-        self, data_train, data_val, learning_rate, max_epochs=500, log_fn=default_log_fn
+        self, data_train, data_val, learning_rate, max_epochs=10, log_fn=default_log_fn
     ):
         (X_train, y_train) = data_train
         (X_val, y_val) = data_val
@@ -155,18 +173,19 @@ class ImageTrain:
                         )
                         out = model.forward(x.view(BATCH, 1, H, W)).view(BATCH, C)
                         for i in range(BATCH):
-                            m = -1000
-                            ind = -1
+                            m = -float("inf")
+                            ind = 0
                             for j in range(C):
                                 if out[i, j] > m:
                                     ind = j
                                     m = out[i, j]
                             if y[i, ind] == 1.0:
                                 correct += 1
-                    log_fn(epoch, total_loss, correct, BATCH, losses, model)
 
                     total_loss = 0.0
                     model.train()
+            log_fn(epoch, total_loss, correct, BATCH, losses, model)
+                
 
 
 if __name__ == "__main__":

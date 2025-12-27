@@ -4,8 +4,7 @@ import embeddings
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from project.run_sentiment import CNNSentimentKim, encode_sentiment_data
-from run_sentiment import SentenceSentimentTrain
+from run_sentiment import CNNSentimentKim, encode_sentiment_data, SentenceSentimentTrain
 
 from datasets import load_dataset
 
@@ -26,14 +25,14 @@ def predictions_dataframe(predictions, sentences):
     ]
 
 
-@st.cache(allow_output_mutation=True)
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
 def load_glue_dataset():
     print("Loading dataset")
     return load_dataset("glue", "sst2")
 
 
 #  st.subheader("Encode training data as nxk Glove embeddings tensor representations")
-@st.cache(allow_output_mutation=True)
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
 def load_data(dataset, n_train, n_val):
     print("Loading embeddings... This can take a while the first time.")
     return encode_sentiment_data(
@@ -198,3 +197,7 @@ def render_run_sentiment_interface():
             log_fn=log_fn,
             data_val=(X_val, y_val),
         )
+
+
+# Run the app
+render_run_sentiment_interface()

@@ -179,9 +179,6 @@ def dropout(input: Tensor, rate: float, ignore: bool = False) -> Tensor:
     if rate == 1:
         return input * 0
     
-    mask = rand(input.shape) > rate
-    print(input, rate)
-    print("here", mask)
-
-    return input * mask/(1.0-rate)
+    mask = rand(input.shape, backend=input.backend) > rate
+    return input * mask / (1.0 - rate)
 
